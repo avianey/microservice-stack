@@ -1,0 +1,74 @@
+// TODO write dockerfile at build to have exact names
+
+group 'fr.avianey'
+version '1.0.0-SNAPSHOT'
+
+apply plugin: 'java'
+apply plugin: 'spring-boot'
+
+sourceCompatibility = 1.8
+[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+
+sourceSets.main.java.srcDirs = [ "src/main/java" ]
+sourceSets.test.java.srcDirs = [ "src/test/java" ]
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath("org.springframework.boot:spring-boot-gradle-plugin:1.3.1.RELEASE")
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+test {
+    useTestNG()
+    include '**'
+    testLogging.showStandardStreams = true
+}
+
+dependencies {
+    compile "org.springframework.boot:spring-boot-starter-web:1.3.1.RELEASE"
+    compile "org.springframework.boot:spring-boot-starter-jersey:1.3.1.RELEASE"
+    testCompile "org.testng:testng:6.9.9"
+    testCompile "org.springframework.boot:spring-boot-starter-test:1.3.1.RELEASE"
+}
+
+bootRepackage {
+    mainClass = 'fr.avianey.spring.microservice.MicroserviceController'
+}
+
+task dist(type: Tar, dependsOn: bootRepackage) {
+    archiveName "docker.tar"
+    from jar.outputs.files
+    from "src/main/docker"
+}
+
+import java.nio.file.Files
+import java.nio.file.Paths
+task buildDocker(dependsOn: [dist, build]) << {
+    // first call might be quite long...
+    URL url = new URL("http", "127.0.0.1", 2375, "/build?t=toto"); // TODO use project name instead with version as tag
+    HttpURLConnection con = (HttpURLConnection) url.openConnection();
+    con.setRequestMethod("POST");
+    con.setRequestProperty("Content-Type", "application/tar");
+    con.setDoOutput(true);
+    OutputStream os = con.getOutputStream();
+    Files.copy(Paths.get("$buildDir/distributions/docker.tar"), os);
+    os.flush();
+    os.close();
+    BufferedReader reader = new BufferedReader(new InputStreamReader(con.getInputStream()));
+    String line;
+    while ((line = reader.readLine()) != null) {
+        println line;
+    }
+    reader.close();
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '2.3'
+}
